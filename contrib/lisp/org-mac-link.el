@@ -145,6 +145,12 @@
   :group 'org-mac-link
   :type 'boolean)
 
+(defcustom org-mac-grab-Brave-app-p t
+  "Add menu option [b]rave to grab links from Brave.app."
+  :tag "Grab Brave.app links"
+  :group 'org-mac-link
+  :type 'boolean)
+
 (defcustom org-mac-grab-Together-app-p nil
   "Add menu option [t]ogether to grab links from Together.app."
   :tag "Grab Together.app links"
@@ -206,6 +212,7 @@ When done, go grab the link, and insert it at point."
 	    ("f" "irefox" org-mac-firefox-insert-frontmost-url ,org-mac-grab-Firefox-app-p)
 	    ("v" "imperator" org-mac-vimperator-insert-frontmost-url ,org-mac-grab-Firefox+Vimperator-p)
 	    ("c" "hrome" org-mac-chrome-insert-frontmost-url ,org-mac-grab-Chrome-app-p)
+	    ("b" "rave" org-mac-brave-insert-frontmost-url ,org-mac-grab-Brave-app-p)
 	    ("t" "ogether" org-mac-together-insert-selected ,org-mac-grab-Together-app-p)
 	    ("S" "kim" org-mac-skim-insert-page ,org-mac-grab-Skim-app-p)))
          (menu-string (make-string 0 ?x))
@@ -396,6 +403,44 @@ The links are of the form <link>::split::<name>."
 (defun org-mac-chrome-insert-frontmost-url ()
   (interactive)
   (insert (org-mac-chrome-get-frontmost-url)))
+
+
+;; Handle links from Brave.app
+;; Grab the frontmost url from Brave. Same limitations as
+;; Firefox because Brave doesn't publish an Applescript dictionary
+
+(defun org-as-mac-brave-get-frontmost-url ()
+  (let ((result
+	 (do-applescript
+	  (concat
+	   "set frontmostApplication to path to frontmost application\n"
+	   "tell application \"Brave\"\n"
+	   "	set theUrl to get URL of active tab of first window\n"
+	   "	set theResult to (get theUrl) & \"::split::\" & (get name of window 1)\n"
+	   "end tell\n"
+	   "activate application (frontmostApplication as text)\n"
+	   "set links to {}\n"
+	   "copy theResult to the end of links\n"
+	   "return links as string\n"))))
+    (replace-regexp-in-string
+     "^\"\\|\"$" "" (car (split-string result "[\r\n]+" t)))))
+
+(defun org-mac-brave-get-frontmost-url ()
+  (interactive)
+  (message "Applescript: Getting Brave url...")
+  (let* ((url-and-title (org-as-mac-brave-get-frontmost-url))
+         (split-link (split-string url-and-title "::split::"))
+         (URL (car split-link))
+         (description (cadr split-link))
+         (org-link))
+    (when (not (string= URL ""))
+      (setq org-link (org-make-link-string URL description)))
+    (kill-new org-link)
+    org-link))
+
+(defun org-mac-brave-insert-frontmost-url ()
+  (interactive)
+  (insert (org-mac-brave-get-frontmost-url)))
 
 
 ;; Handle links from Safari.app
